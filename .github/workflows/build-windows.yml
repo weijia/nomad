@@ -34,7 +34,7 @@ jobs:
         run: pnpm build
 
       - name: Install Go Bindata tool
-        run: go install github.com/kevinburke/go-bindata/...@latest
+        run: go install github.com/kevinburke/go-bindata/v4/...@latest
 
       - name: Embed UI into Go code
         run: go-bindata -pkg agent -prefix ui -modtime 1480000000 -tags ui -o command/agent/bindata_assetfs.go ./ui/dist/...
