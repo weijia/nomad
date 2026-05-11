@@ -34,10 +34,10 @@ jobs:
         run: pnpm build
 
       - name: Install Go Bindata tool
-        run: go install github.com/go-bindata/go-bindata-assetfs/...@latest
+        run: go install github.com/kevinburke/go-bindata/...@latest
 
       - name: Embed UI into Go code
-        run: go-bindata-assetfs -pkg agent -prefix ui -modtime 1480000000 -tags ui -o command/agent/bindata_assetfs.go ./ui/dist/...
+        run: go-bindata -pkg agent -prefix ui -modtime 1480000000 -tags ui -o command/agent/bindata_assetfs.go ./ui/dist/...
 
       - name: Build Nomad Binary
         run: go build -tags ui -o nomad.exe .
