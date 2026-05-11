@@ -1,0 +1,107 @@
+name: Build ARM Nomad with UI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-linux-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ".go-version"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install UI dependencies
+        working-directory: ./ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Build UI
+        working-directory: ./ui
+        run: pnpm build
+
+      - name: Install Go Bindata tools
+        run: |
+          go install github.com/hashicorp/go-bindata/go-bindata@bf7910af899725e4938903fb32048c7c0b15f12e
+          go install github.com/elazarl/go-bindata-assetfs/go-bindata-assetfs@234c15e7648ff35458026de92b34c637bae5e6f7
+
+      - name: Embed UI into Go code
+        run: go-bindata-assetfs -pkg agent -prefix ui -modtime 1480000000 -tags ui -o command/agent/bindata_assetfs.go ./ui/dist/...
+
+      - name: Install ARM64 cross compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build Nomad Binary for Linux ARM64
+        env:
+          CGO_ENABLED: 1
+          CC: aarch64-linux-gnu-gcc
+          GOOS: linux
+          GOARCH: arm64
+        run: go build -trimpath -ldflags "-X github.com/hashicorp/nomad/version.GitCommit=$(git rev-parse HEAD)" -tags "ui hashicorpmetrics" -o nomad-linux-arm64 .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nomad-linux-arm64
+          path: nomad-linux-arm64
+
+  build-darwin-arm64:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ".go-version"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install UI dependencies
+        working-directory: ./ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Build UI
+        working-directory: ./ui
+        run: pnpm build
+
+      - name: Install Go Bindata tools
+        run: |
+          go install github.com/hashicorp/go-bindata/go-bindata@bf7910af899725e4938903fb32048c7c0b15f12e
+          go install github.com/elazarl/go-bindata-assetfs/go-bindata-assetfs@234c15e7648ff35458026de92b34c637bae5e6f7
+
+      - name: Embed UI into Go code
+        run: go-bindata-assetfs -pkg agent -prefix ui -modtime 1480000000 -tags ui -o command/agent/bindata_assetfs.go ./ui/dist/...
+
+      - name: Build Nomad Binary for Darwin ARM64
+        env:
+          CGO_ENABLED: 1
+          GOOS: darwin
+          GOARCH: arm64
+        run: go build -trimpath -ldflags "-X github.com/hashicorp/nomad/version.GitCommit=$(git rev-parse HEAD)" -tags "ui hashicorpmetrics" -o nomad-darwin-arm64 .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nomad-darwin-arm64
+          path: nomad-darwin-arm64
