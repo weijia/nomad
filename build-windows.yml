@@ -1,0 +1,51 @@
+name: Build Windows Nomad with UI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ".go-version"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install UI dependencies
+        working-directory: ./ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Build UI
+        working-directory: ./ui
+        run: pnpm build
+
+      - name: Install Go Bindata tool
+        run: go install github.com/go-bindata/go-bindata-assetfs/...@latest
+
+      - name: Embed UI into Go code
+        run: go-bindata-assetfs -pkg agent -prefix ui -modtime 1480000000 -tags ui -o command/agent/bindata_assetfs.go ./ui/dist/...
+
+      - name: Build Nomad Binary
+        run: go build -tags ui -o nomad.exe .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nomad-windows-ui
+          path: nomad.exe
