@@ -1,9 +1,9 @@
 name: Build Windows Nomad with UI
 
 on:
-  workflow_dispatch: # 允许在 GitHub 网页手动点击运行
+  workflow_dispatch:
   push:
-    branches: [ main ] # 或者你正在工作的分支
+    branches: [ main ]
 
 jobs:
   build-windows:
@@ -15,21 +15,25 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22' # 根据你仓库里的 .go-version 文件调整
+          go-version-file: ".go-version"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
-      - name: Install Yarn
-        run: npm install -g yarn
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install UI dependencies
+        working-directory: ./ui
+        run: pnpm install --frozen-lockfile
 
       - name: Build UI
         working-directory: ./ui
-        run: |
-          yarn install --network-timeout 300000
-          npm run build
+        run: pnpm build
 
       - name: Install Go Bindata tool
         run: go install github.com/go-bindata/go-bindata-assetfs/...@latest
