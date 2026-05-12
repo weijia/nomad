@@ -234,10 +234,24 @@ jobs:
 
           touch android/app/proguard-rules.pro
 
-      - name: Generate Gradle Wrapper
+      - name: Setup Gradle Wrapper
         working-directory: ./android
         run: |
-          gradle wrapper --gradle-version 8.0
+          mkdir -p gradle/wrapper
+          # Download gradle-wrapper.jar (required by gradlew)
+          curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+          curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradlew -o gradlew
+          curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradlew.bat -o gradlew.bat
+          cat > gradle/wrapper/gradle-wrapper.properties << 'PROPS'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-bin.zip
+          networkTimeout=10000
+          validateDistributionUrl=true
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          PROPS
+          chmod +x gradlew
           ./gradlew --version
 
       - name: Build Debug APK
