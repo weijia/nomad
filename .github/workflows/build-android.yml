@@ -162,15 +162,22 @@ jobs:
           }
           EOF
 
-          cat > android/build.gradle << 'EOF'
-          buildscript {
-              repositories { google(); mavenCentral() }
-              dependencies { classpath 'com.android.tools.build:gradle:8.1.0' }
+          cat > android/settings.gradle << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
           }
-          allprojects { repositories { google(); mavenCentral() } }
+          include ':app'
           EOF
 
-          echo "include ':app'" > android/settings.gradle
+          cat > android/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application' version '8.1.0' apply false
+          }
+          EOF
 
           cat > android/gradle.properties << 'EOF'
           android.useAndroidX=true
@@ -179,6 +186,11 @@ jobs:
 
           cat > android/app/build.gradle << 'EOF'
           plugins { id 'com.android.application' }
+
+          repositories {
+              google()
+              mavenCentral()
+          }
 
           android {
               namespace 'com.nomad.ui'
@@ -226,14 +238,15 @@ jobs:
         working-directory: ./android
         run: |
           gradle wrapper --gradle-version 8.0
+          ./gradlew --version
 
       - name: Build Debug APK
         working-directory: ./android
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Build Release APK
         working-directory: ./android
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
