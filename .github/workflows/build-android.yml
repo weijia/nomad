@@ -140,6 +140,53 @@ jobs:
           </resources>
           EOF
 
+          cat > android/app/src/main/java/com/nomad/ui/LogCache.java << 'EOF'
+          package com.nomad.ui;
+
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public class LogCache {
+              private static final LogCache instance = new LogCache();
+              private final List<String> logs = new ArrayList<>();
+              private final List<LogListener> listeners = new ArrayList<>();
+              private static final int MAX_LOGS = 2000;
+
+              public interface LogListener {
+                  void onLog(String line);
+              }
+
+              private LogCache() {}
+
+              public static LogCache getInstance() { return instance; }
+
+              public synchronized void addLog(String line) {
+                  String timestamp = new java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US)
+                      .format(new java.util.Date());
+                  String entry = "[" + timestamp + "] " + line;
+                  logs.add(entry);
+                  if (logs.size() > MAX_LOGS) {
+                      logs.remove(0);
+                  }
+                  for (LogListener l : listeners) {
+                      l.onLog(entry);
+                  }
+              }
+
+              public synchronized List<String> getLogs() {
+                  return new ArrayList<>(logs);
+              }
+
+              public synchronized void addListener(LogListener l) {
+                  listeners.add(l);
+              }
+
+              public synchronized void removeListener(LogListener l) {
+                  listeners.remove(l);
+              }
+          }
+          EOF
+
           cat > android/app/src/main/java/com/nomad/ui/NomadService.java << 'EOF'
           package com.nomad.ui;
 
@@ -149,7 +196,6 @@ jobs:
           import android.app.Service;
           import android.content.Intent;
           import android.os.Build;
-          import android.os.Environment;
           import android.os.IBinder;
           import android.util.Log;
           import java.io.File;
@@ -160,6 +206,7 @@ jobs:
               private static final String TAG = "NomadService";
               private static final String CHANNEL_ID = "nomad_service";
               private Process nomadProcess;
+              private boolean running = false;
 
               @Override
               public void onCreate() {
@@ -167,7 +214,7 @@ jobs:
                   createNotificationChannel();
                   Notification notification = new Notification.Builder(this, CHANNEL_ID)
                       .setContentTitle("Nomad Agent")
-                      .setContentText("Running")
+                      .setContentText("Starting...")
                       .setSmallIcon(android.R.drawable.ic_menu_manage)
                       .build();
                   startForeground(1, notification);
@@ -175,12 +222,15 @@ jobs:
 
               @Override
               public int onStartCommand(Intent intent, int flags, int startId) {
-                  startNomad();
+                  if (!running) {
+                      startNomad();
+                  }
                   return START_STICKY;
               }
 
               private void startNomad() {
                   new Thread(() -> {
+                      running = true;
                       try {
                           File nomadDir = new File(getFilesDir(), "nomad");
                           nomadDir.mkdirs();
@@ -188,30 +238,100 @@ jobs:
                           String dataDir = nomadDir.getAbsolutePath() + "/data";
                           new File(dataDir).mkdirs();
 
+                          String libPath = getApplicationInfo().nativeLibraryDir + "/libnomad.so";
+                          LogCache.getInstance().addLog("=== Nomad Agent Starting ===");
+                          LogCache.getInstance().addLog("Binary: " + libPath);
+                          LogCache.getInstance().addLog("Data dir: " + dataDir);
+
+                          // Check if binary exists and is executable
+                          File bin = new File(libPath);
+                          if (!bin.exists()) {
+                              LogCache.getInstance().addLog("ERROR: Binary not found at " + libPath);
+                              LogCache.getInstance().addLog("Checking nativeLibraryDir contents:");
+                              File libDir = new File(getApplicationInfo().nativeLibraryDir);
+                              if (libDir.exists()) {
+                                  File[] files = libDir.listFiles();
+                                  if (files != null) {
+                                      for (File f : files) {
+                                          LogCache.getInstance().addLog("  " + f.getName() + " (" + f.length() + " bytes)");
+                                      }
+                                  }
+                              } else {
+                                  LogCache.getInstance().addLog("  nativeLibraryDir does not exist!");
+                              }
+                              running = false;
+                              return;
+                          }
+                          LogCache.getInstance().addLog("Binary size: " + bin.length() + " bytes");
+
                           String[] cmd = {
-                              getApplicationInfo().nativeLibraryDir + "/libnomad.so",
+                              libPath,
                               "agent",
                               "-dev",
                               "-bind=0.0.0.0:4646",
                               "-data-dir=" + dataDir
                           };
 
+                          LogCache.getInstance().addLog("Command: " + String.join(" ", cmd));
                           Log.i(TAG, "Starting nomad: " + String.join(" ", cmd));
+
                           ProcessBuilder pb = new ProcessBuilder(cmd);
                           pb.environment().put("HOME", nomadDir.getAbsolutePath());
+                          pb.environment().put("NOMAD_LOG_LEVEL", "INFO");
                           pb.redirectErrorStream(true);
                           nomadProcess = pb.start();
+
+                          LogCache.getInstance().addLog("Process started, PID: " + getPid(nomadProcess));
 
                           BufferedReader reader = new BufferedReader(
                               new InputStreamReader(nomadProcess.getInputStream()));
                           String line;
+                          int lineCount = 0;
                           while ((line = reader.readLine()) != null) {
                               Log.i(TAG, "nomad: " + line);
+                              LogCache.getInstance().addLog(line);
+                              lineCount++;
+                              // Update notification every 50 lines
+                              if (lineCount % 50 == 0) {
+                                  updateNotification("Nomad Agent - Running (" + lineCount + " lines)");
+                              }
                           }
+
+                          int exitCode = nomadProcess.waitFor();
+                          LogCache.getInstance().addLog("=== Nomad exited with code: " + exitCode + " ===");
+                          updateNotification("Nomad Agent - Exited (" + exitCode + ")");
+                          running = false;
                       } catch (Exception e) {
                           Log.e(TAG, "Failed to start nomad", e);
+                          LogCache.getInstance().addLog("ERROR: " + e.getMessage());
+                          StringBuilder sb = new StringBuilder();
+                          for (StackTraceElement ste : e.getStackTrace()) {
+                              sb.append("  at ").append(ste.toString()).append("\n");
+                          }
+                          LogCache.getInstance().addLog(sb.toString());
+                          running = false;
                       }
                   }).start();
+              }
+
+              private void updateNotification(String text) {
+                  Notification notification = new Notification.Builder(this, CHANNEL_ID)
+                      .setContentTitle("Nomad Agent")
+                      .setContentText(text)
+                      .setSmallIcon(android.R.drawable.ic_menu_manage)
+                      .build();
+                  NotificationManager manager = getSystemService(NotificationManager.class);
+                  if (manager != null) manager.notify(1, notification);
+              }
+
+              private long getPid(Process p) {
+                  try {
+                      java.lang.reflect.Field pidField = p.getClass().getDeclaredField("pid");
+                      pidField.setAccessible(true);
+                      return pidField.getLong(p);
+                  } catch (Exception e) {
+                      return -1;
+                  }
               }
 
               private void createNotificationChannel() {
@@ -225,7 +345,11 @@ jobs:
 
               @Override
               public void onDestroy() {
-                  if (nomadProcess != null) nomadProcess.destroy();
+                  if (nomadProcess != null) {
+                      LogCache.getInstance().addLog("=== Stopping Nomad process ===");
+                      nomadProcess.destroy();
+                  }
+                  running = false;
                   super.onDestroy();
               }
 
@@ -238,29 +362,42 @@ jobs:
           package com.nomad.ui;
 
           import android.app.Activity;
-          import android.content.Context;
           import android.content.Intent;
-          import android.net.Uri;
+          import android.graphics.Color;
+          import android.graphics.Typeface;
           import android.os.Build;
           import android.os.Bundle;
           import android.os.Handler;
           import android.os.Looper;
+          import android.view.Gravity;
           import android.view.KeyEvent;
           import android.view.View;
           import android.view.WindowManager;
           import android.webkit.WebChromeClient;
-          import android.webkit.WebResourceRequest;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
-          import android.widget.Toast;
+          import android.widget.Button;
+          import android.widget.FrameLayout;
+          import android.widget.LinearLayout;
+          import android.widget.ScrollView;
+          import android.widget.TextView;
 
           public class MainActivity extends Activity {
               private static final String NOMAD_URL = "http://127.0.0.1:4646/ui/";
-              private WebView webView;
               private Handler handler = new Handler(Looper.getMainLooper());
               private int retryCount = 0;
-              private static final int MAX_RETRIES = 30;
+              private static final int MAX_RETRIES = 60;
+
+              private FrameLayout rootLayout;
+              private ScrollView logScrollView;
+              private TextView logTextView;
+              private WebView webView;
+              private LinearLayout toolbar;
+              private Button toggleBtn;
+              private boolean showingLogs = true;
+              private boolean nomadReady = false;
+              private LogCache.LogListener logListener;
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
@@ -270,6 +407,14 @@ jobs:
                       WindowManager.LayoutParams.FLAG_FULLSCREEN);
                   if (getActionBar() != null) getActionBar().hide();
 
+                  // Build UI
+                  rootLayout = new FrameLayout(this);
+                  createToolbar();
+                  createLogPanel();
+                  createWebView();
+
+                  setContentView(rootLayout);
+
                   // Start Nomad agent service
                   Intent serviceIntent = new Intent(this, NomadService.class);
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -278,8 +423,60 @@ jobs:
                       startService(serviceIntent);
                   }
 
+                  // Listen for logs
+                  logListener = line -> handler.post(() -> appendLog(line));
+                  LogCache.getInstance().addListener(logListener);
+
+                  // Start polling for Nomad readiness
+                  waitForNomadAndLoad();
+              }
+
+              private void createToolbar() {
+                  toolbar = new LinearLayout(this);
+                  toolbar.setOrientation(LinearLayout.HORIZONTAL);
+                  toolbar.setBackgroundColor(Color.parseColor("#1A73E8"));
+                  toolbar.setPadding(8, 8, 8, 8);
+                  toolbar.setGravity(Gravity.CENTER_VERTICAL);
+
+                  toggleBtn = new Button(this);
+                  toggleBtn.setText("Show Web UI");
+                  toggleBtn.setTextColor(Color.WHITE);
+                  toggleBtn.setBackgroundColor(Color.parseColor("#1557B0"));
+                  toggleBtn.setOnClickListener(v -> toggleView());
+                  LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.WRAP_CONTENT,
+                      LinearLayout.LayoutParams.WRAP_CONTENT);
+                  toolbar.addView(toggleBtn, btnParams);
+
+                  FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,
+                      FrameLayout.LayoutParams.WRAP_CONTENT);
+                  rootLayout.addView(toolbar, params);
+              }
+
+              private void createLogPanel() {
+                  logScrollView = new ScrollView(this);
+                  logScrollView.setBackgroundColor(Color.parseColor("#1E1E1E"));
+
+                  logTextView = new TextView(this);
+                  logTextView.setTextColor(Color.parseColor("#00FF00"));
+                  logTextView.setTypeface(Typeface.MONOSPACE, Typeface.NORMAL);
+                  logTextView.setTextSize(10);
+                  logTextView.setPadding(12, 12, 12, 12);
+                  logTextView.setText("Waiting for Nomad agent to start...\n\n");
+
+                  logScrollView.addView(logTextView);
+
+                  FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,
+                      FrameLayout.LayoutParams.MATCH_PARENT);
+                  params.topMargin = 60; // below toolbar
+                  rootLayout.addView(logScrollView, params);
+              }
+
+              private void createWebView() {
                   webView = new WebView(this);
-                  setContentView(webView);
+                  webView.setBackgroundColor(Color.WHITE);
 
                   WebSettings settings = webView.getSettings();
                   settings.setJavaScriptEnabled(true);
@@ -296,8 +493,37 @@ jobs:
                   webView.setWebChromeClient(new WebChromeClient());
                   webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
-                  // Wait for Nomad agent to be ready, then load UI
-                  waitForNomadAndLoad();
+                  FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,
+                      FrameLayout.LayoutParams.MATCH_PARENT);
+                  params.topMargin = 60;
+                  rootLayout.addView(webView, params);
+
+                  // Start hidden
+                  webView.setVisibility(View.GONE);
+              }
+
+              private void toggleView() {
+                  if (showingLogs) {
+                      logScrollView.setVisibility(View.GONE);
+                      webView.setVisibility(View.VISIBLE);
+                      toggleBtn.setText("Show Logs");
+                      showingLogs = false;
+                  } else {
+                      webView.setVisibility(View.GONE);
+                      logScrollView.setVisibility(View.VISIBLE);
+                      toggleBtn.setText("Show Web UI");
+                      showingLogs = true;
+                  }
+              }
+
+              private void appendLog(String line) {
+                  if (logTextView != null) {
+                      logTextView.append(line + "\n");
+                      // Auto-scroll to bottom
+                      logScrollView.post(() ->
+                          logScrollView.fullScroll(ScrollView.FOCUS_DOWN));
+                  }
               }
 
               private void waitForNomadAndLoad() {
@@ -305,49 +531,71 @@ jobs:
                       try {
                           java.net.URL url = new java.net.URL(NOMAD_URL);
                           java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                          conn.setConnectTimeout(1000);
-                          conn.setReadTimeout(1000);
+                          conn.setConnectTimeout(500);
+                          conn.setReadTimeout(500);
                           conn.setRequestMethod("HEAD");
                           int response = conn.getResponseCode();
                           conn.disconnect();
                           if (response == 200 || response == 302 || response == 301) {
-                              webView.loadUrl(NOMAD_URL);
+                              if (!nomadReady) {
+                                  nomadReady = true;
+                                  LogCache.getInstance().addLog("=== Nomad UI is ready at " + NOMAD_URL + " ===");
+                                  LogCache.getInstance().addLog("Tap 'Show Web UI' button to switch to the Nomad dashboard");
+                                  // Auto-switch to WebView
+                                  handler.postDelayed(() -> {
+                                      if (showingLogs) toggleView();
+                                  }, 1000);
+                              }
                               retryCount = 0;
+                              // Keep checking connectivity
+                              scheduleNextCheck();
                           } else {
-                              retry();
+                              scheduleNextCheck();
                           }
                       } catch (Exception e) {
-                          retry();
+                          scheduleNextCheck();
                       }
                   }, 1000);
               }
 
-              private void retry() {
+              private void scheduleNextCheck() {
                   retryCount++;
                   if (retryCount < MAX_RETRIES) {
-                      waitForNomadAndLoad();
+                      handler.postDelayed(this::waitForNomadAndLoad, 1000);
                   } else {
-                      Toast.makeText(this, "Nomad agent failed to start", Toast.LENGTH_LONG).show();
+                      LogCache.getInstance().addLog("=== WARNING: Nomad agent did not start within 60 seconds ===");
+                      LogCache.getInstance().addLog("Check the logs above for errors.");
                   }
               }
 
               @Override
               public boolean onKeyDown(int keyCode, KeyEvent event) {
-                  if (keyCode == KeyEvent.KEYCODE_BACK && webView.canGoBack()) {
-                      webView.goBack();
-                      return true;
+                  if (keyCode == KeyEvent.KEYCODE_BACK) {
+                      if (!showingLogs && webView.canGoBack()) {
+                          webView.goBack();
+                          return true;
+                      }
                   }
                   return super.onKeyDown(keyCode, event);
               }
 
               @Override
-              protected void onResume() { super.onResume(); webView.onResume(); }
+              protected void onResume() {
+                  super.onResume();
+                  if (webView != null) webView.onResume();
+              }
 
               @Override
-              protected void onPause() { super.onPause(); webView.onPause(); }
+              protected void onPause() {
+                  super.onPause();
+                  if (webView != null) webView.onPause();
+              }
 
               @Override
               protected void onDestroy() {
+                  if (logListener != null) {
+                      LogCache.getInstance().removeListener(logListener);
+                  }
                   if (webView != null) webView.destroy();
                   super.onDestroy();
               }
