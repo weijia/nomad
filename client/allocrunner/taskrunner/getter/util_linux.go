@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2015, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
-//go:build linux
+//go:build linux && !android
 
 package getter
 

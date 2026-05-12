@@ -1,11 +1,11 @@
 // Copyright IBM Corp. 2015, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
-//go:build linux && !android
+//go:build android
 
 package fingerprint
 
 func initPlatformFingerprints(fps map[string]Factory) {
-	fps["cgroup"] = NewCgroupFingerprint
-	fps["bridge"] = NewBridgeFingerprint
+	// Android does not support cgroup or bridge fingerprinting
+	// landlock is excluded because Android kernel lacks landlock syscall
 }
