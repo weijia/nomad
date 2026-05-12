@@ -54,7 +54,7 @@ jobs:
           export CGO_LDFLAGS="-L${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android -llog -lm -ldl -lc"
           CGO_ENABLED=1 GOOS=android GOARCH=arm64 \
             go build -trimpath \
-            -ldflags "-X github.com/hashicorp/nomad/version.GitCommit=$(git rev-parse HEAD) -s -w -extldflags '-static'" \
+            -ldflags "-X github.com/hashicorp/nomad/version.GitCommit=$(git rev-parse HEAD) -s -w" \
             -tags "ui hashicorpmetrics" \
             -o nomad-android-arm64 .
 
