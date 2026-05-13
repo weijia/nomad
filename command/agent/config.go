@@ -2412,7 +2412,7 @@ func (c *Config) normalizeAddrs() error {
 // parseSingleInterfaceTemplate parses a go-sockaddr template and returns an
 // error if it doesn't result in a single value.
 func parseSingleInterfaceTemplate(tpl string) (string, error) {
-	out, err := template.Parse(tpl)
+	out, err := parseInterfaceTemplate(tpl)
 	if err != nil {
 		// Typically something like:
 		// unable to parse template "{{printfl \"en50\"}}": template: sockaddr.Parse:1: function "printfl" not defined
@@ -2421,7 +2421,6 @@ func parseSingleInterfaceTemplate(tpl string) (string, error) {
 
 	// Remove any extra empty space around the rendered result and check if the
 	// result is also not empty if the user provided a template.
-	out = strings.TrimSpace(out)
 	if tpl != "" && out == "" {
 		return "", fmt.Errorf("template %q evaluated to empty result", tpl)
 	}
@@ -2437,22 +2436,6 @@ func parseSingleInterfaceTemplate(tpl string) (string, error) {
 	}
 
 	return out, nil
-}
-
-// parseMultipleIPTemplate is used as a helper function to parse out a multiple IP
-// addresses from a config parameter.
-func parseMultipleIPTemplate(ipTmpl string) ([]string, error) {
-	out, err := template.Parse(ipTmpl)
-	if err != nil {
-		return []string{}, fmt.Errorf("Unable to parse address template %q: %v", ipTmpl, err)
-	}
-
-	ips := strings.Split(out, " ")
-	if len(ips) == 0 {
-		return []string{}, errors.New("No addresses found, please configure one.")
-	}
-
-	return deduplicateAddrs(ips), nil
 }
 
 // normalizeAddrWithPort assumes that addr does not contain a port,
