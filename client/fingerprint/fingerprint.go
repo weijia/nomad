@@ -19,6 +19,9 @@ const (
 	// TightenNetworkTimeoutsConfig is a config key that can be used during
 	// tests to tighten the timeouts for fingerprinters that make network calls.
 	TightenNetworkTimeoutsConfig = "test.tighten_network_timeouts"
+
+	// DefaultNetworkSpeed is the default network speed in Mbits if detection fails.
+	DefaultNetworkSpeed = 1000
 )
 
 func init() {

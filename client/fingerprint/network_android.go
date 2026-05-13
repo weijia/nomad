@@ -6,10 +6,7 @@
 package fingerprint
 
 import (
-	"net"
-
 	log "github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/nomad/client/config"
 	"github.com/hashicorp/nomad/nomad/structs"
 )
 
@@ -30,11 +27,12 @@ func NewNetworkFingerprint(logger log.Logger) Fingerprint {
 func (f *NetworkFingerprint) Fingerprint(req *FingerprintRequest, resp *FingerprintResponse) error {
 	// On Android, we cannot enumerate network interfaces due to netlink restrictions.
 	// Return a minimal network configuration with loopback.
-	cfg := req.Config
 
-	// Only add network if not already configured
-	if cfg.NetworkInterface != "" {
-		f.logger.Debug("network interface specified but cannot be detected on Android", "interface", cfg.NetworkInterface)
+	// Initialize NodeResources if needed
+	if resp.NodeResources == nil {
+		resp.NodeResources = &structs.NodeResources{
+			Networks: []*structs.NetworkResource{},
+		}
 	}
 
 	// Add a minimal loopback network entry
@@ -43,11 +41,12 @@ func (f *NetworkFingerprint) Fingerprint(req *FingerprintRequest, resp *Fingerpr
 		Device: "lo",
 		CIDR:   "127.0.0.1/32",
 		IP:     "127.0.0.1",
-		MBits:  1000,
+		MBits:  DefaultNetworkSpeed,
 	}
 
 	resp.AddAttribute("unique.network.ip", newNetwork.IP)
-	resp.Resources.Networks = append(resp.Resources.Networks, newNetwork)
+	resp.NodeResources.Networks = append(resp.NodeResources.Networks, newNetwork)
+	resp.Detected = true
 
 	return nil
 }

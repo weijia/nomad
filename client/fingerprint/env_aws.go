@@ -236,7 +236,7 @@ func (f *EnvAWSFingerprint) throughput(request *FingerprintRequest, client *imds
 		return throughput
 	}
 
-	return defaultNetworkSpeed
+	return DefaultNetworkSpeed
 }
 
 // EnvAWSFingerprint uses lookup table to approximate network speeds

@@ -18,18 +18,6 @@ import (
 	"github.com/hashicorp/nomad/nomad/structs"
 )
 
-const (
-	// defaultNetworkSpeed is the speed set if the network link speed could not
-	// be detected.
-	defaultNetworkSpeed = 1000
-
-	// networkDisallowLinkLocalOption/Default are used to allow the operator to
-	// decide how the fingerprinter handles an interface that only contains link
-	// local addresses.
-	networkDisallowLinkLocalOption  = "fingerprint.network.disallow_link_local"
-	networkDisallowLinkLocalDefault = false
-)
-
 // NetworkFingerprint is used to fingerprint the Network capabilities of a node
 type NetworkFingerprint struct {
 	StaticFingerprinter
@@ -100,8 +88,8 @@ func (f *NetworkFingerprint) Fingerprint(req *FingerprintRequest, resp *Fingerpr
 		mbits = throughput
 		logger.Debug("link speed detected", "mbits", mbits)
 	} else {
-		mbits = defaultNetworkSpeed
-		logger.Debug("link speed could not be detected and no speed specified by user, falling back to default speed", "mbits", defaultNetworkSpeed)
+		mbits = DefaultNetworkSpeed
+		logger.Debug("link speed could not be detected and no speed specified by user, falling back to default speed", "mbits", DefaultNetworkSpeed)
 	}
 
 	// Create the network resources from the interface
@@ -144,8 +132,8 @@ func (f *NetworkFingerprint) createNodeNetworkResources(ifaces []net.Interface, 
 	for _, iface := range ifaces {
 		speed := f.linkSpeed(iface.Name)
 		if speed == 0 {
-			speed = defaultNetworkSpeed
-			f.logger.Debug("link speed could not be detected, falling back to default speed", "interface", iface.Name, "mbits", defaultNetworkSpeed)
+			speed = DefaultNetworkSpeed
+			f.logger.Debug("link speed could not be detected, falling back to default speed", "interface", iface.Name, "mbits", DefaultNetworkSpeed)
 		}
 
 		newNetwork := &structs.NodeNetworkResource{
