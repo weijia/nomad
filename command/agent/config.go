@@ -2341,7 +2341,7 @@ func (c *Config) Copy() *Config {
 // initialized and have reasonable defaults.
 func (c *Config) normalizeAddrs() error {
 	if c.BindAddr != "" {
-		ipStr, err := listenerutil.ParseSingleIPTemplate(c.BindAddr)
+		ipStr, err := parseSingleIPTemplate(c.BindAddr)
 		if err != nil {
 			return fmt.Errorf("Bind address resolution failed: %v", err)
 		}
@@ -2469,7 +2469,7 @@ func normalizeBind(addr, bind string) (string, error) {
 	if addr == "" {
 		return bind, nil
 	}
-	addr, err := listenerutil.ParseSingleIPTemplate(addr)
+	addr, err := parseSingleIPTemplate(addr)
 	return ipaddr.NormalizeAddr(addr), err
 }
 
@@ -2500,7 +2500,7 @@ func normalizeMultipleBind(addr, bind string) ([]string, error) {
 //
 // Loopback is only considered a valid advertise address in dev mode.
 func normalizeAdvertise(addr string, bind string, defport int, dev bool) (string, error) {
-	addr, err := listenerutil.ParseSingleIPTemplate(addr)
+	addr, err := parseSingleIPTemplate(addr)
 	if err != nil {
 		return "", fmt.Errorf("Error parsing advertise address template: %v", err)
 	}
@@ -2541,7 +2541,7 @@ func normalizeAdvertise(addr string, bind string, defport int, dev bool) (string
 	}
 
 	// Bind is not localhost but not a valid advertise IP, use first private IP
-	addr, err = listenerutil.ParseSingleIPTemplate("{{ GetPrivateIP }}")
+	addr, err = getDefaultAdvertiseAddr()
 	if err != nil {
 		return "", fmt.Errorf("Unable to parse default advertise address: %v", err)
 	}
