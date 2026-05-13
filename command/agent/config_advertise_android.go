@@ -5,19 +5,20 @@
 
 package agent
 
-import (
-	"net"
-)
+import "net"
 
 // lookupBindAddress resolves the bind address to find suitable advertise IPs.
-// On Android, we avoid DNS lookups and return appropriate defaults.
+// On Android, when bind is 0.0.0.0, we auto-detect the LAN IP using a UDP trick.
 func lookupBindAddress(bind string) ([]net.IP, error) {
-	// Handle special bind addresses
 	switch bind {
 	case "0.0.0.0", "":
-		// Return loopback as the advertise address
-		// This is safe for Android where we typically run in single-node mode
-		return []net.IP{net.ParseIP("127.0.0.1")}, nil
+		// Auto-detect the local LAN IP
+		ip, err := autoDetectLocalIP()
+		if err != nil {
+			// Fallback to loopback
+			return []net.IP{net.ParseIP("127.0.0.1")}, nil
+		}
+		return []net.IP{ip}, nil
 	case "127.0.0.1", "localhost":
 		return []net.IP{net.ParseIP("127.0.0.1")}, nil
 	}
@@ -27,6 +28,6 @@ func lookupBindAddress(bind string) ([]net.IP, error) {
 		return []net.IP{ip}, nil
 	}
 
-	// Try DNS lookup as fallback (may fail on Android)
+	// Try DNS lookup as fallback
 	return net.LookupIP(bind)
 }

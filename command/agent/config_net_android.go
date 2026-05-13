@@ -9,7 +9,28 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 )
+
+// autoDetectLocalIP uses a UDP connection trick to find the local IP
+// that would be used to reach the internet. This does NOT require netlink
+// or any special permissions on Android.
+func autoDetectLocalIP() (net.IP, error) {
+	// Connect a UDP socket to a public IP (doesn't actually send data).
+	// The OS will choose the best local interface to reach that destination.
+	conn, err := net.DialTimeout("udp4", "8.8.8.8:80", 3*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect local IP: %w", err)
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	if localAddr.IP == nil || localAddr.IP.IsUnspecified() {
+		return nil, fmt.Errorf("detected unspecified local IP")
+	}
+
+	return localAddr.IP, nil
+}
 
 // parseSingleIPTemplate parses an IP template on Android.
 // Android restricts netlink socket access, so we avoid template parsing
@@ -61,8 +82,12 @@ func isPlainIP(s string) bool {
 }
 
 // getDefaultAdvertiseAddr returns the default advertise address on Android.
-// Since we can't query network interfaces due to netlink restrictions,
-// we return 127.0.0.1 as a safe default.
+// Uses UDP trick to auto-detect the local LAN IP without netlink.
+// Falls back to 127.0.0.1 if detection fails.
 func getDefaultAdvertiseAddr() (string, error) {
-	return "127.0.0.1", nil
+	ip, err := autoDetectLocalIP()
+	if err != nil {
+		return "127.0.0.1", nil
+	}
+	return ip.String(), nil
 }
