@@ -21,7 +21,6 @@ import (
 	"time"
 
 	sockaddr "github.com/hashicorp/go-sockaddr"
-	"github.com/hashicorp/go-sockaddr/template"
 	client "github.com/hashicorp/nomad/client/config"
 	"github.com/hashicorp/nomad/client/fingerprint"
 	"github.com/hashicorp/nomad/helper"
