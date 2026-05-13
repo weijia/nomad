@@ -2431,7 +2431,7 @@ func parseSingleInterfaceTemplate(tpl string) (string, error) {
 	// guaranteed separators that we can use to test if the template returned
 	// multiple interfaces.
 	// The test below checks if the template results to a single valid interface.
-	_, err = net.InterfaceByName(out)
+	_, err = getInterfaceByName(out)
 	if err != nil {
 		return "", fmt.Errorf("invalid interface name %q", out)
 	}
