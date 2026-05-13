@@ -2520,7 +2520,7 @@ func normalizeAdvertise(addr string, bind string, defport int, dev bool) (string
 	}
 
 	// Fallback to bind address first, and then try resolving the local hostname
-	ips, err := net.LookupIP(bind)
+	ips, err := lookupBindAddress(bind)
 	if err != nil {
 		return "", fmt.Errorf("Error resolving bind address %q: %v", bind, err)
 	}
