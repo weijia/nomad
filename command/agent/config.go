@@ -2504,6 +2504,11 @@ func normalizeAdvertise(addr string, bind string, defport int, dev bool) (string
 		return "", fmt.Errorf("Error parsing advertise address template: %v", err)
 	}
 
+	// Treat unspecified addresses (0.0.0.0, ::) as empty so we can find a valid advertise address
+	if ip := net.ParseIP(addr); ip != nil && ip.IsUnspecified() {
+		addr = ""
+	}
+
 	if addr != "" {
 		// Default to using manually configured address
 		_, _, err = net.SplitHostPort(addr)
