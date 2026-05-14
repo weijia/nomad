@@ -6,102 +6,14 @@
 package hoststats
 
 import (
-	"math"
-	"sync"
 	"time"
 
-	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/client/lib/numalib"
-	"github.com/hashicorp/nomad/plugins/device"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 )
-
-// HostStats represents resource usage stats of the host running a Nomad client
-type HostStats struct {
-	Memory           *MemoryStats
-	CPU              []*CPUStats
-	DiskStats        []*DiskStats
-	AllocDirStats    *DiskStats
-	DeviceStats      []*DeviceGroupStats
-	Uptime           uint64
-	Timestamp        int64
-	CPUTicksConsumed float64
-}
-
-// MemoryStats represents stats related to virtual memory usage
-type MemoryStats struct {
-	Total     uint64
-	Available uint64
-	Used      uint64
-	Free      uint64
-}
-
-// CPUStats represents stats related to cpu usage
-type CPUStats struct {
-	CPU          string
-	User         float64
-	System       float64
-	Idle         float64
-	TotalPercent float64
-	TotalTicks   float64
-}
-
-// DiskStats represents stats related to disk usage
-type DiskStats struct {
-	Device            string
-	Mountpoint        string
-	Size              uint64
-	Used              uint64
-	Available         uint64
-	UsedPercent       float64
-	InodesUsedPercent float64
-}
-
-// DeviceGroupStats represents stats related to device group
-type DeviceGroupStats = device.DeviceGroupStats
-
-// DeviceStatsCollector is used to retrieve all the latest statistics for all devices.
-type DeviceStatsCollector func() []*DeviceGroupStats
-
-// NodeStatsCollector is an interface which is used for the purposes of mocking
-// the HostStatsCollector in the tests
-type NodeStatsCollector interface {
-	Collect() error
-	Stats() *HostStats
-}
-
-// HostStatsCollector collects host resource usage stats
-type HostStatsCollector struct {
-	top                  *numalib.Topology
-	statsCalculator      map[string]*HostCpuStatsCalculator
-	hostStats            *HostStats
-	hostStatsLock        sync.RWMutex
-	allocDir             string
-	deviceStatsCollector DeviceStatsCollector
-
-	// badParts is a set of partitions whose usage cannot be read; used to
-	// squelch logspam.
-	badParts map[string]struct{}
-
-	logger hclog.Logger
-}
-
-// NewHostStatsCollector returns a HostStatsCollector. The allocDir is passed in
-// so that we can present the disk related statistics for the mountpoint where
-// the allocation directory lives
-func NewHostStatsCollector(logger hclog.Logger, top *numalib.Topology, allocDir string, deviceStatsCollector DeviceStatsCollector) *HostStatsCollector {
-	return &HostStatsCollector{
-		logger:               logger.Named("host_stats"),
-		top:                  top,
-		statsCalculator:      make(map[string]*HostCpuStatsCalculator),
-		allocDir:             allocDir,
-		badParts:             make(map[string]struct{}),
-		deviceStatsCollector: deviceStatsCollector,
-	}
-}
 
 // Collect collects stats related to resource usage of a host
 func (h *HostStatsCollector) Collect() error {
@@ -150,16 +62,10 @@ func (h *HostStatsCollector) collectLocked() error {
 	hs.DiskStats = diskStats
 
 	// Getting the disk stats for the allocation directory
-	usage, err := disk.Usage(h.allocDir)
-	if err != nil {
-		h.logger.Error("failed to find disk usage of alloc", "alloc_dir", h.allocDir, "error", err)
-		hs.AllocDirStats = &DiskStats{}
-	} else {
-		hs.AllocDirStats = h.toDiskStats(usage, nil)
-	}
+	hs.AllocDirStats = h.getAllocDirDiskStats()
+
 	// Collect devices stats
-	deviceStats := h.collectDeviceGroupStats()
-	hs.DeviceStats = deviceStats
+	hs.DeviceStats = h.collectDeviceGroupStats()
 
 	// Update the collected status object.
 	h.hostStats = hs
@@ -172,14 +78,12 @@ func (h *HostStatsCollector) collectMemoryStats() (*MemoryStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	mem := &MemoryStats{
+	return &MemoryStats{
 		Total:     memStats.Total,
 		Available: memStats.Available,
 		Used:      memStats.Used,
 		Free:      memStats.Free,
-	}
-
-	return mem, nil
+	}, nil
 }
 
 func (h *HostStatsCollector) collectDiskStats() ([]*DiskStats, error) {
@@ -192,19 +96,14 @@ func (h *HostStatsCollector) collectDiskStats() ([]*DiskStats, error) {
 	for _, partition := range partitions {
 		usage, err := disk.Usage(partition.Mountpoint)
 		if err != nil {
-			if _, ok := h.badParts[partition.Mountpoint]; ok {
-				// already known bad, don't log again
-				continue
+			if _, ok := h.badParts[partition.Mountpoint]; !ok {
+				h.logger.Warn("failed to find disk usage for partition", "partition", partition.Mountpoint, "error", err)
+				h.badParts[partition.Mountpoint] = struct{}{}
 			}
-
-			h.badParts[partition.Mountpoint] = struct{}{}
-			h.logger.Warn("error fetching host disk usage stats", "error", err, "partition", partition.Mountpoint)
 			continue
 		}
-		delete(h.badParts, partition.Mountpoint)
 
-		ds := h.toDiskStats(usage, &partition)
-		diskStats = append(diskStats, ds)
+		diskStats = append(diskStats, h.toDiskStats(usage, &partition))
 	}
 
 	return diskStats, nil
@@ -218,20 +117,15 @@ func (h *HostStatsCollector) collectDeviceGroupStats() []*DeviceGroupStats {
 	return h.deviceStatsCollector()
 }
 
-// toDiskStats merges UsageStat and PartitionStat to create a DiskStat
 func (h *HostStatsCollector) toDiskStats(usage *disk.UsageStat, partitionStat *disk.PartitionStat) *DiskStats {
 	ds := DiskStats{
+		Device:            usage.Path,
+		Mountpoint:        usage.Path,
 		Size:              usage.Total,
 		Used:              usage.Used,
 		Available:         usage.Free,
 		UsedPercent:       usage.UsedPercent,
 		InodesUsedPercent: usage.InodesUsedPercent,
-	}
-	if math.IsNaN(ds.UsedPercent) {
-		ds.UsedPercent = 0.0
-	}
-	if math.IsNaN(ds.InodesUsedPercent) {
-		ds.InodesUsedPercent = 0.0
 	}
 
 	if partitionStat != nil {
@@ -259,15 +153,33 @@ func (h *HostStatsCollector) collectCPUStats() (cpus []*CPUStats, totalTicks flo
 		totalCompute := h.top.TotalCompute()
 		ticks := (total / 100.0) * (float64(totalCompute) / float64(len(cpuStats)))
 		cs[idx] = &CPUStats{
-			CPU:          cpuStat.CPU,
-			User:         user,
-			System:       system,
-			Idle:         idle,
-			TotalPercent: total,
-			TotalTicks:   ticks,
+			CPU:           cpuStat.CPU,
+			User:          user,
+			System:        system,
+			Idle:          idle,
+			TotalPercent:  total,
+			TotalTicks:    ticks,
 		}
 		ticksConsumed += ticks
 	}
 
 	return cs, ticksConsumed, nil
+}
+
+func (h *HostStatsCollector) getAllocDirDiskStats() *DiskStats {
+	usage, err := disk.Usage(h.allocDir)
+	if err != nil {
+		h.logger.Error("failed to find disk usage of alloc", "alloc_dir", h.allocDir, "error", err)
+		return &DiskStats{}
+	}
+
+	return &DiskStats{
+		Device:            usage.Path,
+		Mountpoint:        usage.Path,
+		Size:              usage.Total,
+		Used:              usage.Used,
+		Available:         usage.Free,
+		UsedPercent:       usage.UsedPercent,
+		InodesUsedPercent: usage.InodesUsedPercent,
+	}
 }
