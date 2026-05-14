@@ -1,4 +1,4 @@
-// Copyright IBM Corp. 2015, 2025
+// Copyright IBM Corp. 2015, 2026
 // SPDX-License-Identifier: BUSL-1.1
 
 package agent
@@ -1252,6 +1252,10 @@ func ApiTgToStructsTG(job *structs.Job, taskGroup *api.TaskGroup, tg *structs.Ta
 
 	if taskGroup.ShutdownDelay != nil {
 		tg.ShutdownDelay = taskGroup.ShutdownDelay
+	}
+
+	if taskGroup.MaxRunDuration != nil {
+		tg.MaxRunDuration = taskGroup.MaxRunDuration
 	}
 
 	if taskGroup.ReschedulePolicy != nil {

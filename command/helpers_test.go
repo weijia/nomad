@@ -1,4 +1,4 @@
-// Copyright IBM Corp. 2015, 2025
+// Copyright IBM Corp. 2015, 2026
 // SPDX-License-Identifier: BUSL-1.1
 
 package command
@@ -461,6 +461,45 @@ func TestJobGetter_Validate(t *testing.T) {
 
 		})
 	}
+}
+
+func TestJobTaskGroupMaxRunDeadline(t *testing.T) {
+	ci.Parallel(t)
+
+	jobType := api.JobTypeBatch
+	groupName := "group"
+	maxRunDuration := 10 * time.Minute
+
+	// The alloc was created 5 minutes ago.
+	createtime := time.Now().Add(-5 * time.Minute).Round(time.Second)
+	expectedDeadline := createtime.Add(maxRunDuration)
+
+	job := &api.Job{
+		Type:       &jobType,
+		TaskGroups: []*api.TaskGroup{{Name: &groupName, MaxRunDuration: &maxRunDuration}},
+	}
+
+	deadline, ok := jobTaskGroupMaxRunDeadline(job, groupName, createtime.UnixNano())
+	must.True(t, ok)
+	must.Eq(t, expectedDeadline.UTC(), deadline.UTC())
+}
+
+// TestJobTaskGroupMaxRunDeadline_ZeroCreateTime verifies that a zero CreateTime
+// (alloc not yet scheduled) produces no deadline.
+func TestJobTaskGroupMaxRunDeadline_ZeroCreateTime(t *testing.T) {
+	ci.Parallel(t)
+
+	jobType := api.JobTypeBatch
+	groupName := "group"
+	maxRunDuration := 10 * time.Minute
+
+	job := &api.Job{
+		Type:       &jobType,
+		TaskGroups: []*api.TaskGroup{{Name: &groupName, MaxRunDuration: &maxRunDuration}},
+	}
+
+	_, ok := jobTaskGroupMaxRunDeadline(job, groupName, 0)
+	must.False(t, ok)
 }
 
 func TestPrettyTimeDiff(t *testing.T) {
