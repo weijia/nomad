@@ -18,6 +18,14 @@ import (
 	"github.com/hashicorp/nomad/nomad/structs"
 )
 
+const (
+	// networkDisallowLinkLocalOption/Default are used to allow the operator to
+	// decide how the fingerprinter handles an interface that only contains link
+	// local addresses.
+	networkDisallowLinkLocalOption  = "fingerprint.network.disallow_link_local"
+	networkDisallowLinkLocalDefault = false
+)
+
 // NetworkFingerprint is used to fingerprint the Network capabilities of a node
 type NetworkFingerprint struct {
 	StaticFingerprinter
