@@ -11,8 +11,8 @@ import (
 	"time"
 
 	consul "github.com/hashicorp/consul/api"
-	"github.com/hashicorp/go-secure-stdlib/listenerutil"
 
+	"github.com/hashicorp/nomad/helper/listenerutil"
 	"github.com/hashicorp/nomad/helper/pointer"
 	"github.com/hashicorp/nomad/nomad/structs"
 )
@@ -340,7 +340,7 @@ func (c *ConsulConfig) ApiConfig() (*consul.Config, error) {
 	// http.Transport.
 	config := consul.DefaultConfig()
 	if c.Addr != "" {
-		ipStr, err := listenerutil.ParseSingleIPTemplate(c.Addr)
+		ipStr, err := listenerutil.ParseAddressTemplate(c.Addr)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse address template %q: %v", c.Addr, err)
 		}
