@@ -148,9 +148,16 @@ func NewHostStatsCollector(logger hclog.Logger, top *numalib.Topology, allocDir 
 	}
 }
 
-// Stats returns the stats
+// Stats returns the host stats that has been collected
 func (h *HostStatsCollector) Stats() *HostStats {
 	h.hostStatsLock.RLock()
 	defer h.hostStatsLock.RUnlock()
+
+	if h.hostStats == nil {
+		if err := h.collectLocked(); err != nil {
+			h.logger.Warn("error fetching host resource usage stats", "error", err)
+		}
+	}
+
 	return h.hostStats
 }
