@@ -8,7 +8,6 @@ package hoststats
 import (
 	"time"
 
-	"github.com/hashicorp/nomad/client/lib/numalib"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
