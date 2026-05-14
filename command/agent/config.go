@@ -3305,6 +3305,9 @@ func LoadConfigDir(dir string) (*Config, error) {
 		}
 	}
 
+	// Apply platform-specific defaults (e.g., Android auto-discovery)
+	applyAndroidDefaults(result)
+
 	return result, nil
 }
 
