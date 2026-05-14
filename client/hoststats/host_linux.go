@@ -256,57 +256,6 @@ func (h *HostStatsCollector) toDiskStats(usage *disk.UsageStat, partitionStat *d
 	return &ds
 }
 
-// HostCpuStatsCalculator calculates cpu usage percentages
-type HostCpuStatsCalculator struct {
-	prevIdle   float64
-	prevUser   float64
-	prevSystem float64
-	prevBusy   float64
-	prevTotal  float64
-}
-
-// NewHostCpuStatsCalculator returns a HostCpuStatsCalculator
-func NewHostCpuStatsCalculator() *HostCpuStatsCalculator {
-	return &HostCpuStatsCalculator{}
-}
-
-// Calculate calculates the current cpu usage percentages
-func (h *HostCpuStatsCalculator) Calculate(times cpu.TimesStat) (idle float64, user float64, system float64, total float64) {
-	currentIdle := times.Idle
-	currentUser := times.User
-	currentSystem := times.System
-	currentTotal := times.Total() // this is Idle + currentBusy
-	currentBusy := times.User + times.System + times.Nice + times.Iowait + times.Irq +
-		times.Softirq + times.Steal + times.Guest + times.GuestNice
-
-	deltaTotal := currentTotal - h.prevTotal
-	idle = ((currentIdle - h.prevIdle) / deltaTotal) * 100
-	user = ((currentUser - h.prevUser) / deltaTotal) * 100
-	system = ((currentSystem - h.prevSystem) / deltaTotal) * 100
-	total = ((currentBusy - h.prevBusy) / deltaTotal) * 100
-
-	// Protect against any invalid values
-	if math.IsNaN(idle) || math.IsInf(idle, 0) || idle < 0.0 {
-		idle = 100.0
-	}
-	if math.IsNaN(user) || math.IsInf(user, 0) || user < 0.0 {
-		user = 0.0
-	}
-	if math.IsNaN(system) || math.IsInf(system, 0) || system < 0.0 {
-		system = 0.0
-	}
-	if math.IsNaN(total) || math.IsInf(total, 0) || total < 0.0 {
-		total = 0.0
-	}
-
-	h.prevIdle = currentIdle
-	h.prevUser = currentUser
-	h.prevSystem = currentSystem
-	h.prevTotal = currentTotal
-	h.prevBusy = currentBusy
-	return
-}
-
 func (h *HostStatsCollector) collectCPUStats() (cpus []*CPUStats, totalTicks float64, err error) {
 	ticksConsumed := 0.0
 	cpuStats, err := cpu.Times(true)
