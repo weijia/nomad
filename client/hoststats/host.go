@@ -1,6 +1,8 @@
 // Copyright IBM Corp. 2015, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
+//go:build !android
+
 package hoststats
 
 import (
@@ -179,8 +181,6 @@ func (h *HostStatsCollector) collectMemoryStats() (*MemoryStats, error) {
 
 	return mem, nil
 }
-
-//go:build !android
 
 func (h *HostStatsCollector) collectDiskStats() ([]*DiskStats, error) {
 	partitions, err := disk.Partitions(false)
