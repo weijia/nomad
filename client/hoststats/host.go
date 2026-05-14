@@ -180,6 +180,8 @@ func (h *HostStatsCollector) collectMemoryStats() (*MemoryStats, error) {
 	return mem, nil
 }
 
+//go:build !android
+
 func (h *HostStatsCollector) collectDiskStats() ([]*DiskStats, error) {
 	partitions, err := disk.Partitions(false)
 	if err != nil {
