@@ -7,7 +7,7 @@ import "os"
 
 // applyAndroidDefaults applies zero-config defaults to the config.
 // If server mode is enabled without explicit bootstrap_expect,
-// default to 1 and enable mDNS auto-discovery for zero-config startup.
+// default to 1 for single-node startup.
 func applyAndroidDefaults(cfg *Config) {
 	if cfg == nil {
 		return
@@ -27,10 +27,10 @@ func applyAndroidDefaults(cfg *Config) {
 		cfg.Server.BootstrapExpect = 1
 	}
 
-	// If no retry_join is configured, enable mDNS auto-discovery
-	if len(cfg.Server.ServerJoin.RetryJoin) == 0 {
-		cfg.Server.ServerJoin.RetryJoin = []string{"provider=mdns"}
-	}
+	// Note: mDNS auto-discovery via "provider=mdns" is not yet integrated
+	// with the retry_join mechanism. To join a cluster, either:
+	// 1. Specify peer IPs manually: -retry-join="192.168.1.100"
+	// 2. Use a supported go-discover provider (aws, gce, etc.)
 }
 
 // defaultDataDir returns the default data directory based on the platform.
