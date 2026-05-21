@@ -34,6 +34,7 @@ import (
 	gatedwriter "github.com/hashicorp/nomad/helper/gated-writer"
 	"github.com/hashicorp/nomad/helper/logging"
 	"github.com/hashicorp/nomad/helper/winsvc"
+	mdnsdiscovery "github.com/hashicorp/nomad/nomad/discovery"
 	"github.com/hashicorp/nomad/nomad/structs"
 	"github.com/hashicorp/nomad/nomad/structs/config"
 	"github.com/hashicorp/nomad/version"
@@ -58,6 +59,7 @@ type Command struct {
 	agent          *Agent
 	httpServers    []*HTTPServer
 	retryJoinErrCh chan struct{}
+	mdnsDiscovery  *mdnsdiscovery.MDNSDiscovery
 }
 
 func (c *Command) readConfig() *Config {
@@ -882,6 +884,7 @@ func (c *Command) Run(args []string) int {
 	}
 
 	defer func() {
+		c.stopMDNS()
 		c.agent.Shutdown()
 
 		// Shutdown the http server at the end, to ease debugging if
@@ -892,6 +895,11 @@ func (c *Command) Run(args []string) int {
 			}
 		}
 	}()
+
+	// Start mDNS discovery for automatic peer detection
+	if err := c.setupMDNS(config); err != nil {
+		c.agent.logger.Warn("mDNS setup failed", "error", err)
+	}
 
 	// Join startup nodes if specified
 	if err := c.startupJoin(config); err != nil {

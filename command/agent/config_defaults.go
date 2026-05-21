@@ -7,7 +7,8 @@ import "os"
 
 // applyAndroidDefaults applies zero-config defaults to the config.
 // If server mode is enabled without explicit bootstrap_expect,
-// default to 1 for single-node startup.
+// default to 1 for single-node startup. Also enables mDNS
+// auto-discovery for finding peers on the local network.
 func applyAndroidDefaults(cfg *Config) {
 	if cfg == nil {
 		return
@@ -27,16 +28,20 @@ func applyAndroidDefaults(cfg *Config) {
 		cfg.Server.BootstrapExpect = 1
 	}
 
-	// Note: mDNS auto-discovery via "provider=mdns" is not yet integrated
-	// with the retry_join mechanism. To join a cluster, either:
-	// 1. Specify peer IPs manually: -retry-join="192.168.1.100"
-	// 2. Use a supported go-discover provider (aws, gce, etc.)
+	// If no retry_join is configured, enable mDNS auto-discovery
+	// This uses go-discover's built-in mDNS provider to find peers
+	// broadcasting on _nomad-serf._tcp service
+	if len(cfg.Server.ServerJoin.RetryJoin) == 0 {
+		cfg.Server.ServerJoin.RetryJoin = []string{
+			"provider=mdns,service=_nomad-serf._tcp",
+		}
+	}
 }
 
 // defaultDataDir returns the default data directory based on the platform.
 func defaultDataDir() string {
 	// On Android, use /data/local/tmp/nomad
-	// On other Unix systems, use /var/lib/nomad or $HOME/.nomad
+	// On other Unix systems, use $HOME/.nomad
 	// On Windows, use %LOCALAPPDATA%\Nomad
 	if _, err := os.Stat("/data/local/tmp"); err == nil {
 		return "/data/local/tmp/nomad"
