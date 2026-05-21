@@ -83,6 +83,11 @@ func main() {
 }
 
 func Run(args []string) int {
+	// Default to "agent -server" if no arguments are provided
+	if len(args) == 0 {
+		args = []string{"agent", "-server"}
+	}
+
 	metaPtr := new(command.Meta)
 	metaPtr.SetupUi(args)
 

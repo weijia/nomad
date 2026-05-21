@@ -809,6 +809,11 @@ func (c *Command) AutocompleteArgs() complete.Predictor {
 }
 
 func (c *Command) Run(args []string) int {
+	// Default to server mode if no arguments are provided
+	if len(args) == 0 {
+		args = []string{"-server"}
+	}
+
 	c.Ui = &cli.PrefixedUi{
 		OutputPrefix: "==> ",
 		InfoPrefix:   "    ",
