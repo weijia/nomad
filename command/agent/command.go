@@ -329,6 +329,9 @@ func (c *Command) readConfig() *Config {
 
 	config.Server.DefaultSchedulerConfig.Canonicalize()
 
+	// Apply zero-config defaults (data_dir, bootstrap_expect, mDNS)
+	applyAndroidDefaults(config)
+
 	if !c.IsValidConfig(config, cmdConfig) {
 		return nil
 	}
