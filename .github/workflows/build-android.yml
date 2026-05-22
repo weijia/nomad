@@ -72,13 +72,13 @@ jobs:
           mkdir -p android/app/src/main/java/com/nomad/ui
           mkdir -p android/app/src/main/res/values
           mkdir -p android/app/src/main/assets/www
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a/bin
+          mkdir -p android/app/src/main/assets/bin
 
           # Copy built UI to assets
           cp -r ui/dist/* android/app/src/main/assets/www/
 
-          # Copy Nomad binary into Android native libs dir
-          cp nomad-android-arm64 android/app/src/main/jniLibs/arm64-v8a/libnomad.so
+          # Copy Nomad binary into assets (NOT jniLibs - that dir is noexec on Android 10+)
+          cp nomad-android-arm64 android/app/src/main/assets/bin/nomad
 
           # Generate signing key
           keytool -genkey -v -keystore android/app/keystore.jks \
@@ -238,34 +238,38 @@ jobs:
                           String dataDir = nomadDir.getAbsolutePath() + "/data";
                           new File(dataDir).mkdirs();
 
-                          String libPath = getApplicationInfo().nativeLibraryDir + "/libnomad.so";
+                          // Copy binary from assets to app's files dir (jniLibs is noexec on Android 10+)
+                          String binPath = nomadDir.getAbsolutePath() + "/nomad";
+                          File binFile = new File(binPath);
+                          if (!binFile.exists()) {
+                              LogCache.getInstance().addLog("Copying Nomad binary from assets...");
+                              java.io.InputStream in = getAssets().open("bin/nomad");
+                              java.io.FileOutputStream out = new java.io.FileOutputStream(binFile);
+                              byte[] buf = new byte[8192];
+                              int len;
+                              while ((len = in.read(buf)) != -1) {
+                                  out.write(buf, 0, len);
+                              }
+                              out.close();
+                              in.close();
+                              binFile.setExecutable(true);
+                              LogCache.getInstance().addLog("Binary copied to: " + binPath);
+                          }
+
                           LogCache.getInstance().addLog("=== Nomad Agent Starting ===");
-                          LogCache.getInstance().addLog("Binary: " + libPath);
+                          LogCache.getInstance().addLog("Binary: " + binPath);
                           LogCache.getInstance().addLog("Data dir: " + dataDir);
 
                           // Check if binary exists and is executable
-                          File bin = new File(libPath);
-                          if (!bin.exists()) {
-                              LogCache.getInstance().addLog("ERROR: Binary not found at " + libPath);
-                              LogCache.getInstance().addLog("Checking nativeLibraryDir contents:");
-                              File libDir = new File(getApplicationInfo().nativeLibraryDir);
-                              if (libDir.exists()) {
-                                  File[] files = libDir.listFiles();
-                                  if (files != null) {
-                                      for (File f : files) {
-                                          LogCache.getInstance().addLog("  " + f.getName() + " (" + f.length() + " bytes)");
-                                      }
-                                  }
-                              } else {
-                                  LogCache.getInstance().addLog("  nativeLibraryDir does not exist!");
-                              }
+                          if (!binFile.exists()) {
+                              LogCache.getInstance().addLog("ERROR: Binary not found at " + binPath);
                               running = false;
                               return;
                           }
-                          LogCache.getInstance().addLog("Binary size: " + bin.length() + " bytes");
+                          LogCache.getInstance().addLog("Binary size: " + binFile.length() + " bytes");
 
                           String[] cmd = {
-                              libPath,
+                              binPath,
                               "agent",
                               "-dev",
                               "-bind=0.0.0.0:4646",
