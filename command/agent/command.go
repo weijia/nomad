@@ -55,11 +55,12 @@ type Command struct {
 	Ui         cli.Ui
 	ShutdownCh <-chan struct{}
 
-	args           []string
-	agent          *Agent
-	httpServers    []*HTTPServer
-	retryJoinErrCh chan struct{}
-	mdnsDiscovery  *mdnsdiscovery.MDNSDiscovery
+	args               []string
+	agent              *Agent
+	httpServers        []*HTTPServer
+	retryJoinErrCh     chan struct{}
+	mdnsDiscovery      *mdnsdiscovery.MDNSDiscovery
+	broadcastDiscovery *mdnsdiscovery.BroadcastDiscovery
 }
 
 func (c *Command) readConfig() *Config {
@@ -892,7 +893,7 @@ func (c *Command) Run(args []string) int {
 	}
 
 	defer func() {
-		c.stopMDNS()
+		c.stopDiscovery()
 		c.agent.Shutdown()
 
 		// Shutdown the http server at the end, to ease debugging if
@@ -904,10 +905,13 @@ func (c *Command) Run(args []string) int {
 		}
 	}()
 
-	// Start mDNS discovery for automatic peer detection
-	if err := c.setupMDNS(config); err != nil {
-		c.agent.logger.Warn("mDNS setup failed", "error", err)
+	// Start broadcast/mDNS discovery for automatic peer detection
+	if err := c.setupDiscovery(config); err != nil {
+		c.agent.logger.Warn("discovery setup failed", "error", err)
 	}
+
+	// Start the discovery joiner to periodically join discovered peers
+	c.startDiscoveryJoiner()
 
 	// Join startup nodes if specified
 	if err := c.startupJoin(config); err != nil {

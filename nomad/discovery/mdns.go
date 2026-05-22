@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -126,12 +127,18 @@ func (d *MDNSDiscovery) Start() error {
 
 	d.logger.Info("starting mDNS discovery", "instance", d.config.InstanceName)
 
-	// Register services
+	// Register services (broadcast our presence to other nodes)
+	// On some platforms (e.g., Windows), service registration may fail due to
+	// network restrictions. If all services fail, we should return an error
+	// so the caller can fall back to alternative discovery methods.
 	if err := d.registerServices(); err != nil {
-		return fmt.Errorf("failed to register mDNS services: %w", err)
+		d.logger.Error("mDNS service registration failed",
+			"error", err,
+			"note", "falling back to alternative discovery method")
+		return fmt.Errorf("mDNS registration failed: %w", err)
 	}
 
-	// Start discovery listener
+	// Start discovery listener (find other nodes)
 	d.wg.Add(1)
 	go d.discoveryLoop()
 
@@ -174,6 +181,12 @@ func (d *MDNSDiscovery) registerServices() error {
 		host = "localhost"
 	}
 
+	// mDNS requires a fully-qualified domain name (FQDN) ending with a period
+	// Ensure the hostname is in FQDN format: hostname.local.
+	if !strings.HasSuffix(host, ".") {
+		host = host + ".local."
+	}
+
 	// Get the advertise address for the host
 	ips := []net.IP{}
 	if advertiseIP, err := getAdvertiseIP(); err == nil {
@@ -203,9 +216,11 @@ func (d *MDNSDiscovery) registerServices() error {
 
 	rpcServer, err := mdns.NewServer(&mdns.Config{Zone: rpcService})
 	if err != nil {
-		return fmt.Errorf("failed to create mDNS server for RPC: %w", err)
+		d.logger.Warn("failed to create mDNS server for RPC", "error", err)
+		// Continue with other services
+	} else {
+		d.servers = append(d.servers, rpcServer)
 	}
-	d.servers = append(d.servers, rpcServer)
 
 	// Register Serf service
 	serfService, err := mdns.NewMDNSService(
@@ -223,9 +238,11 @@ func (d *MDNSDiscovery) registerServices() error {
 
 	serfServer, err := mdns.NewServer(&mdns.Config{Zone: serfService})
 	if err != nil {
-		return fmt.Errorf("failed to create mDNS server for Serf: %w", err)
+		d.logger.Warn("failed to create mDNS server for Serf", "error", err)
+		// Continue with other services
+	} else {
+		d.servers = append(d.servers, serfServer)
 	}
-	d.servers = append(d.servers, serfServer)
 
 	// Register HTTP service
 	httpService, err := mdns.NewMDNSService(
@@ -243,15 +260,23 @@ func (d *MDNSDiscovery) registerServices() error {
 
 	httpServer, err := mdns.NewServer(&mdns.Config{Zone: httpService})
 	if err != nil {
-		return fmt.Errorf("failed to create mDNS server for HTTP: %w", err)
+		d.logger.Warn("failed to create mDNS server for HTTP", "error", err)
+		// Continue - at least we tried
+	} else {
+		d.servers = append(d.servers, httpServer)
 	}
-	d.servers = append(d.servers, httpServer)
+
+	// If no servers were successfully created, return an error
+	if len(d.servers) == 0 {
+		return fmt.Errorf("failed to create any mDNS servers - network may not support multicast")
+	}
 
 	d.logger.Info("registered mDNS services",
 		"instance", d.config.InstanceName,
 		"http", d.config.HTTPPort,
 		"rpc", d.config.RPCPort,
 		"serf", d.config.SerfPort,
+		"servers_started", len(d.servers),
 	)
 
 	return nil

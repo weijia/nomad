@@ -29,14 +29,10 @@ func applyAndroidDefaults(cfg *Config) {
 		cfg.Server.BootstrapExpect = 1
 	}
 
-	// If no retry_join is configured, enable mDNS auto-discovery
-	// This uses go-discover's built-in mDNS provider to find peers
-	// broadcasting on _nomad-serf._tcp service
-	if len(cfg.Server.ServerJoin.RetryJoin) == 0 {
-		cfg.Server.ServerJoin.RetryJoin = []string{
-			"provider=mdns,service=_nomad-serf._tcp",
-		}
-	}
+	// Peer discovery is handled by the built-in broadcast/mDNS discovery
+	// mechanism (setupMDNS), not by go-discover's retry_join. The go-discover
+	// mDNS provider doesn't work on Windows due to multicast limitations.
+	// Do NOT set RetryJoin here — discoveryJoiner handles it directly.
 }
 
 // defaultDataDir returns the default data directory based on the platform.
