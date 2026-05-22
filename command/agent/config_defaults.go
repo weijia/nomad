@@ -36,27 +36,53 @@ func applyAndroidDefaults(cfg *Config) {
 }
 
 // defaultDataDir returns the default data directory based on the platform.
+// It tries multiple locations and picks the first one that is writable.
 func defaultDataDir() string {
-	// On Android (app environment), use current directory (app's files dir)
-	// On Android (root/shell), use /data/local/tmp/nomad
-	// On other Unix systems, use $HOME/.nomad
-	// On Windows, use %LOCALAPPDATA%\Nomad
-	if _, err := os.Stat("/system/build.prop"); err == nil {
-		// Android system - check if we have permission to write to /data/local/tmp
-		if _, err := os.Stat("/data/local/tmp"); err == nil {
-			// Try to create a test file to check permissions
-			testFile := "/data/local/tmp/.nomad_test_" + string(os.Getpid())
-			if f, err := os.Create(testFile); err == nil {
-				f.Close()
-				os.Remove(testFile)
-				return "/data/local/tmp/nomad"
-			}
+	candidates := []string{}
+
+	// On Android, /data/local/tmp is writable from root/shell
+	if _, err := os.Stat("/data/local/tmp"); err == nil {
+		candidates = append(candidates, "/data/local/tmp/nomad")
+	}
+
+	// $HOME/.nomad works on most Unix systems and Android app environments
+	if home, err := os.UserHomeDir(); err == nil && home != "" && home != "/" {
+		candidates = append(candidates, home+"/.nomad")
+	}
+
+	// $TMPDIR is available on most systems
+	if tmp := os.Getenv("TMPDIR"); tmp != "" {
+		candidates = append(candidates, tmp+"/nomad")
+	}
+
+	// Current directory as last resort
+	candidates = append(candidates, "./data")
+
+	for _, dir := range candidates {
+		if isWritableDir(dir) {
+			return dir
 		}
-		// No permission - use current directory ( app's private dir)
-		return "./data"
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return home + "/.nomad"
-	}
+
+	// If nothing is writable, return ./data and let the caller handle the error
 	return "./data"
+}
+
+// isWritableDir checks if a directory exists and is writable,
+// or if it can be created.
+func isWritableDir(dir string) bool {
+	// Try to create the directory if it doesn't exist
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return false
+		}
+	}
+	// Check if we can write to it
+	f, err := os.CreateTemp(dir, ".nomad_test_")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
 }
