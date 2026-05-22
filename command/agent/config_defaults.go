@@ -37,11 +37,23 @@ func applyAndroidDefaults(cfg *Config) {
 
 // defaultDataDir returns the default data directory based on the platform.
 func defaultDataDir() string {
-	// On Android, use /data/local/tmp/nomad
+	// On Android (app environment), use current directory (app's files dir)
+	// On Android (root/shell), use /data/local/tmp/nomad
 	// On other Unix systems, use $HOME/.nomad
 	// On Windows, use %LOCALAPPDATA%\Nomad
-	if _, err := os.Stat("/data/local/tmp"); err == nil {
-		return "/data/local/tmp/nomad"
+	if _, err := os.Stat("/system/build.prop"); err == nil {
+		// Android system - check if we have permission to write to /data/local/tmp
+		if _, err := os.Stat("/data/local/tmp"); err == nil {
+			// Try to create a test file to check permissions
+			testFile := "/data/local/tmp/.nomad_test_" + string(os.Getpid())
+			if f, err := os.Create(testFile); err == nil {
+				f.Close()
+				os.Remove(testFile)
+				return "/data/local/tmp/nomad"
+			}
+		}
+		// No permission - use current directory ( app's private dir)
+		return "./data"
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		return home + "/.nomad"
