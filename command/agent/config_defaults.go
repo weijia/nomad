@@ -19,6 +19,7 @@ func applyAndroidDefaults(cfg *Config) {
 		cfg.DataDir = defaultDataDir()
 	}
 
+	// Only apply server-specific defaults if server mode is enabled
 	if cfg.Server == nil || !cfg.Server.Enabled {
 		return
 	}
@@ -49,5 +50,5 @@ func defaultDataDir() string {
 	if home, err := os.UserHomeDir(); err == nil {
 		return home + "/.nomad"
 	}
-	return "./nomad-data"
+	return "./data"
 }
