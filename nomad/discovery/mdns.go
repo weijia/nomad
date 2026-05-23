@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -305,6 +306,15 @@ func parseIP(addr string) (net.IP, error) {
 // discoveryLoop continuously discovers other Nomad nodes
 func (d *MDNSDiscovery) discoveryLoop() {
 	defer d.wg.Done()
+
+	// On Windows, mDNS query (multicast listen) often fails due to network
+	// restrictions. Skip discovery loop - we still broadcast our presence via
+	// registered services, and rely on broadcast discovery for finding peers.
+	if runtime.GOOS == "windows" {
+		d.logger.Debug("mDNS discovery loop disabled on Windows, service registration only")
+		<-d.shutdownCh
+		return
+	}
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()

@@ -83,7 +83,7 @@ var (
 	configSpec = hclspec.NewObject(map[string]*hclspec.Spec{
 		"enabled": hclspec.NewDefault(
 			hclspec.NewAttr("enabled", "bool", false),
-			hclspec.NewLiteral("false"),
+			hclspec.NewLiteral("true"),
 		),
 		"denied_host_uids": hclspec.NewAttr("denied_host_uids", "string", false),
 		"denied_host_gids": hclspec.NewAttr("denied_host_gids", "string", false),

@@ -328,6 +328,8 @@ func (f *NetworkFingerprint) createNetworkResources(throughput int, intf *net.In
 // Returns the interface with the name passed by user. If the name is blank, we
 // use the interface attached to the default route.
 func (f *NetworkFingerprint) findInterface(deviceName string) (*net.Interface, error) {
+	f.logger.Debug("findInterface called", "deviceName", deviceName)
+
 	// If we aren't given a device, look it up by using the interface with the default route
 	if deviceName == "" {
 		ri, err := sockaddr.NewRouteInfo()
@@ -343,9 +345,16 @@ func (f *NetworkFingerprint) findInterface(deviceName string) (*net.Interface, e
 			return nil, fmt.Errorf("no network_interface given and failed to determine interface attached to default route")
 		}
 		deviceName = defaultIfName
+		f.logger.Debug("using default route interface", "deviceName", deviceName)
 	}
 
-	return f.interfaceDetector.InterfaceByName(deviceName)
+	intf, err := f.interfaceDetector.InterfaceByName(deviceName)
+	if err != nil {
+		f.logger.Debug("InterfaceByName failed", "deviceName", deviceName, "error", err)
+		return nil, err
+	}
+	f.logger.Debug("found interface", "deviceName", deviceName, "actualName", intf.Name, "flags", intf.Flags)
+	return intf, nil
 }
 
 // Define a type for the comparison function

@@ -1078,9 +1078,26 @@ func convertClientConfig(agentConfig *Config) (*clientconfig.Config, error) {
 	// Set the GC related configs
 	conf.GCInterval = agentConfig.Client.GCInterval
 	conf.GCParallelDestroys = agentConfig.Client.GCParallelDestroys
-	conf.GCDiskUsageThreshold = agentConfig.Client.GCDiskUsageThreshold
-	conf.GCInodeUsageThreshold = agentConfig.Client.GCInodeUsageThreshold
-	conf.GCMaxAllocs = agentConfig.Client.GCMaxAllocs
+	
+	// Apply Android defaults for GC thresholds if not explicitly set
+	// Default 80% is too aggressive for development environments
+	// Note: DefaultConfig() sets these to non-zero values, so we check against defaults
+	if agentConfig.Client.GCDiskUsageThreshold == 0 || agentConfig.Client.GCDiskUsageThreshold == 80 {
+		conf.GCDiskUsageThreshold = 95
+	} else {
+		conf.GCDiskUsageThreshold = agentConfig.Client.GCDiskUsageThreshold
+	}
+	if agentConfig.Client.GCInodeUsageThreshold == 0 || agentConfig.Client.GCInodeUsageThreshold == 70 {
+		conf.GCInodeUsageThreshold = 95
+	} else {
+		conf.GCInodeUsageThreshold = agentConfig.Client.GCInodeUsageThreshold
+	}
+	if agentConfig.Client.GCMaxAllocs == 0 || agentConfig.Client.GCMaxAllocs == 50 {
+		conf.GCMaxAllocs = 500
+	} else {
+		conf.GCMaxAllocs = agentConfig.Client.GCMaxAllocs
+	}
+	
 	conf.GCVolumesOnNodeGC = agentConfig.Client.GCVolumesOnNodeGC
 
 	if agentConfig.Client.NoHostUUID != nil {

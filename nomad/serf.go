@@ -228,6 +228,26 @@ func (s *Server) maybeBootstrap() {
 	s.bootstrapped.Store(true)
 }
 
+// TryDelayedBootstrap attempts to bootstrap the cluster with the currently
+// known Serf members. This is used by the discovery joiner to trigger
+// cluster formation after peers are discovered via broadcast/mDNS.
+//
+// The expect parameter controls how many voter servers are required:
+//   - expect >= 2: wait until at least that many servers are known, then bootstrap
+//   - expect == 1: bootstrap immediately as a single-node cluster (fallback mode)
+func (s *Server) TryDelayedBootstrap(expect int) {
+	if s.bootstrapped.Load() {
+		return
+	}
+
+	// Temporarily set BootstrapExpect so maybeBootstrap() uses our value
+	old := s.config.BootstrapExpect
+	s.config.BootstrapExpect = expect
+	defer func() { s.config.BootstrapExpect = old }()
+
+	s.maybeBootstrap()
+}
+
 // localMemberEvent is used to reconcile Serf events with the
 // consistent store if we are the current leader.
 func (s *Server) localMemberEvent(me serf.MemberEvent) {
