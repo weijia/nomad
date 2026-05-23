@@ -254,19 +254,23 @@ jobs:
                           LogCache.getInstance().addLog("Binary size: " + binFile.length() + " bytes");
 
                           // Use sh -c to execute (direct exec may fail on some devices)
+                          // -server -client: start both server and client (no config needed)
                           String shellCmd = "exec " + binPath +
-                              " agent -server" +
-                              " -bind=0.0.0.0" +
+                              " agent" +
                               " -data-dir=" + dataDir;
 
                           String[] cmd = { "sh", "-c", shellCmd };
 
                           LogCache.getInstance().addLog("Command: " + shellCmd);
+                          LogCache.getInstance().addLog("Working dir: " + nomadDir.getAbsolutePath());
+                          LogCache.getInstance().addLog("Environment HOME: " + nomadDir.getAbsolutePath());
                           Log.i(TAG, "Starting nomad: " + shellCmd);
 
                           ProcessBuilder pb = new ProcessBuilder(cmd);
+                          pb.directory(nomadDir);
                           pb.environment().put("HOME", nomadDir.getAbsolutePath());
-                          pb.environment().put("NOMAD_LOG_LEVEL", "INFO");
+                          pb.environment().put("NOMAD_LOG_LEVEL", "DEBUG");
+                          pb.environment().put("NOMAD_LOG_JSON", "false");
                           pb.redirectErrorStream(true);
                           nomadProcess = pb.start();
 

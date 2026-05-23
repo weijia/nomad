@@ -83,9 +83,9 @@ func main() {
 }
 
 func Run(args []string) int {
-	// Default to "agent -server" if no arguments are provided
+	// Default to "agent -server -client" if no arguments are provided
 	if len(args) == 0 {
-		args = []string{"agent", "-server"}
+		args = []string{"agent", "-server", "-client"}
 	}
 
 	metaPtr := new(command.Meta)

@@ -813,9 +813,9 @@ func (c *Command) AutocompleteArgs() complete.Predictor {
 }
 
 func (c *Command) Run(args []string) int {
-	// Default to server mode if no arguments are provided
+	// Default to server + client mode if no arguments are provided
 	if len(args) == 0 {
-		args = []string{"-server"}
+		args = []string{"-server", "-client"}
 	}
 
 	c.Ui = &cli.PrefixedUi{
