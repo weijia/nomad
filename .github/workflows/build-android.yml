@@ -268,16 +268,17 @@ jobs:
                           }
                           LogCache.getInstance().addLog("Binary size: " + binFile.length() + " bytes");
 
-                          String[] cmd = {
-                              binPath,
-                              "agent",
-                              "-dev",
-                              "-bind=0.0.0.0:4646",
-                              "-data-dir=" + dataDir
-                          };
+                          // Android SELinux blocks direct exec from app data dir.
+                          // Use "sh -c" to chmod +x then execute.
+                          String shellCmd = "chmod 755 " + binPath + " && exec " + binPath +
+                              " agent -dev" +
+                              " -bind=0.0.0.0:4646" +
+                              " -data-dir=" + dataDir;
 
-                          LogCache.getInstance().addLog("Command: " + String.join(" ", cmd));
-                          Log.i(TAG, "Starting nomad: " + String.join(" ", cmd));
+                          String[] cmd = { "sh", "-c", shellCmd };
+
+                          LogCache.getInstance().addLog("Command: " + shellCmd);
+                          Log.i(TAG, "Starting nomad: " + shellCmd);
 
                           ProcessBuilder pb = new ProcessBuilder(cmd);
                           pb.environment().put("HOME", nomadDir.getAbsolutePath());
