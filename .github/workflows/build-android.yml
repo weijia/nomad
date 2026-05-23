@@ -72,13 +72,13 @@ jobs:
           mkdir -p android/app/src/main/java/com/nomad/ui
           mkdir -p android/app/src/main/res/values
           mkdir -p android/app/src/main/assets/www
-          mkdir -p android/app/src/main/assets/bin
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
 
           # Copy built UI to assets
           cp -r ui/dist/* android/app/src/main/assets/www/
 
-          # Copy Nomad binary into assets (NOT jniLibs - that dir is noexec on Android 10+)
-          cp nomad-android-arm64 android/app/src/main/assets/bin/nomad
+          # Copy Nomad binary into jniLibs (nativeLibraryDir allows execution on Android 10+)
+          cp nomad-android-arm64 android/app/src/main/jniLibs/arm64-v8a/libnomad.so
 
           # Generate signing key
           keytool -genkey -v -keystore android/app/keystore.jks \
@@ -238,29 +238,14 @@ jobs:
                           String dataDir = nomadDir.getAbsolutePath() + "/data";
                           new File(dataDir).mkdirs();
 
-                          // Copy binary from assets to app's files dir (jniLibs is noexec on Android 10+)
-                          String binPath = nomadDir.getAbsolutePath() + "/nomad";
-                          File binFile = new File(binPath);
-                          if (!binFile.exists()) {
-                              LogCache.getInstance().addLog("Copying Nomad binary from assets...");
-                              java.io.InputStream in = getAssets().open("bin/nomad");
-                              java.io.FileOutputStream out = new java.io.FileOutputStream(binFile);
-                              byte[] buf = new byte[8192];
-                              int len;
-                              while ((len = in.read(buf)) != -1) {
-                                  out.write(buf, 0, len);
-                              }
-                              out.close();
-                              in.close();
-                              binFile.setExecutable(true);
-                              LogCache.getInstance().addLog("Binary copied to: " + binPath);
-                          }
+                          // Use nativeLibraryDir which allows execution on Android 10+
+                          String binPath = getApplicationInfo().nativeLibraryDir + "/libnomad.so";
 
                           LogCache.getInstance().addLog("=== Nomad Agent Starting ===");
                           LogCache.getInstance().addLog("Binary: " + binPath);
                           LogCache.getInstance().addLog("Data dir: " + dataDir);
 
-                          // Check if binary exists and is executable
+                          File binFile = new File(binPath);
                           if (!binFile.exists()) {
                               LogCache.getInstance().addLog("ERROR: Binary not found at " + binPath);
                               running = false;
@@ -268,11 +253,10 @@ jobs:
                           }
                           LogCache.getInstance().addLog("Binary size: " + binFile.length() + " bytes");
 
-                          // Android SELinux blocks direct exec from app data dir.
-                          // Use "sh -c" to chmod +x then execute.
-                          String shellCmd = "chmod 755 " + binPath + " && exec " + binPath +
-                              " agent -dev" +
-                              " -bind=0.0.0.0:4646" +
+                          // Use sh -c to execute (direct exec may fail on some devices)
+                          String shellCmd = "exec " + binPath +
+                              " agent -server" +
+                              " -bind=0.0.0.0" +
                               " -data-dir=" + dataDir;
 
                           String[] cmd = { "sh", "-c", shellCmd };
